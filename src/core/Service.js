@@ -36,7 +36,11 @@ Service.prototype.__proto__ = EventEmitter2.prototype;
  * @param failedCallback - the callback function when the service call failed (optional). Params:
  *   * error - the error message reported by ROS
  */
-Service.prototype.callService = function(request, callback, failedCallback) {
+Service.prototype.callService = function (request, callback, failedCallback, options) {
+  options = options || {};
+  compression = options.compression || 'none';
+  fragment_size = options.fragment_size || undefined;
+
   if (this.isAdvertised) {
     return;
   }
@@ -44,7 +48,7 @@ Service.prototype.callService = function(request, callback, failedCallback) {
   var serviceCallId = 'call_service:' + this.name + ':' + (++this.ros.idCounter);
 
   if (callback || failedCallback) {
-    this.ros.once(serviceCallId, function(message) {
+    this.ros.once(serviceCallId, function (message) {
       if (message.result !== undefined && message.result === false) {
         if (typeof failedCallback === 'function') {
           failedCallback(message.values);
@@ -55,12 +59,20 @@ Service.prototype.callService = function(request, callback, failedCallback) {
     });
   }
 
+  if (compression && compression !== 'png' &&
+    compression !== 'cbor' && compression !== 'none') {
+    this.emit('warning', compression +
+      ' compression is not supported. No compression will be used.');
+  }
+
   var call = {
-    op : 'call_service',
-    id : serviceCallId,
-    service : this.name,
+    op: 'call_service',
+    id: serviceCallId,
+    service: this.name,
     type: this.serviceType,
-    args : request
+    args: request,
+    compression: compression,
+    fragment_size: fragment_size
   };
   this.ros.callOnConnection(call);
 };
@@ -76,7 +88,7 @@ Service.prototype.callService = function(request, callback, failedCallback) {
  *   It should return true if the service has finished successfully,
  *   i.e. without any fatal errors.
  */
-Service.prototype.advertise = function(callback) {
+Service.prototype.advertise = function (callback) {
   if (this.isAdvertised || typeof callback !== 'function') {
     return;
   }
@@ -91,7 +103,7 @@ Service.prototype.advertise = function(callback) {
   this.isAdvertised = true;
 };
 
-Service.prototype.unadvertise = function() {
+Service.prototype.unadvertise = function () {
   if (!this.isAdvertised) {
     return;
   }
@@ -102,7 +114,7 @@ Service.prototype.unadvertise = function() {
   this.isAdvertised = false;
 };
 
-Service.prototype._serviceResponse = function(rosbridgeRequest) {
+Service.prototype._serviceResponse = function (rosbridgeRequest) {
   var response = {};
   var success = this._serviceCallback(rosbridgeRequest.args, response);
 
